@@ -7,7 +7,7 @@ import pickle
 import pandas as pd
 # %%
 # Set n for max number of messages
-n = 5000
+n = float('inf')
 # Set top K for max messages to be returned
 top_k = 5
 # %%
@@ -16,24 +16,47 @@ bi_encoder = SentenceTransformer("multi-qa-MiniLM-L6-cos-v1")
 cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 # %%
 # Load data4
-df = pd.read_csv('debates_by_message.csv', low_memory=False)
+df = pd.read_csv('data/debates_by_message.csv', low_memory=False)
+print(df.shape)
+df = df[ ~df['message'].isna() ]
+print(df.shape)
+n = min(n, df.shape[0])
 # %%
 def pre_embed_messages(n=float('inf')):
     """
     TODO: remove 'n' pre run this and save result
     """
-    df = pd.read_csv('../find_closest/debates_by_message.csv', low_memory=False)
+    df = pd.read_csv('data/debates_by_message.csv', low_memory=False)
+    df = df[ ~df['message'].isna() ]
+    n = min(n, df.shape[0])
+    df = df.iloc[:n, :]
     t0 = time.time()
+    batch_size = 10000   
+    embeddings_batched = {}
     print(f'Embedding {min(n, df.shape[0])} Messages ...')
-    parliament_embeddings = bi_encoder.encode(df['message'][:n], convert_to_tensor=True)
+    for i in range(batch_size, df.shape[0]+ batch_size, batch_size):
+        batch_min = i - batch_size
+        batch_max = min(df.shape[0], i)
+        key = str(batch_min) + '-' + str(batch_max)
+        print('Embedding batch', key)
+        df_batch = df.iloc[batch_min:batch_max, :].reset_index(drop=True)
+        batch_embs = bi_encoder.encode(df_batch['message'], convert_to_tensor=True)
+        embeddings_batched[key] = batch_embs
+    # parliament_embeddings = bi_encoder.encode(df['message'][:n], convert_to_tensor=True, show_progress_bar=True)
     t = time.time() - t0
     print(f'Embedded {n} messages in {t:.2f} seconds')
-    return parliament_embeddings
+    return embeddings_batched
 
-pe_df = pd.read_csv('temp_5000_embs.csv', low_memory=False)
+pe_df = pd.read_parquet('parliament_embs.parquet')
 parliament_embeddings = torch.tensor(pe_df.values)
-# parliament_embeddings = pre_embed_messages(n=n)
-
+# parliament_embeddings = pre_embed_messages()
+# %%
+pe_keys = ['0-10000', '10000-20000', '20000-30000', '30000-40000', '40000-50000', '50000-60000', '60000-70000', '70000-80000', '80000-90000', '90000-100000', '100000-110000', '110000-116373']
+p_embs = parliament_embeddings[pe_keys[0]]
+for i, key in enumerate(pe_keys):
+    if i > 0:
+        p_embs = torch.cat((p_embs, parliament_embeddings[key]))
+print(p_embs.shape)
 # %%
 def filter_by_speaker(speaker, df, parliament_embeddings):
     """
@@ -93,13 +116,14 @@ find_closest_messages(test_query, sub_embeddings, sub_corpus, sub_df, top_k=5)
 # %%
 parliament_embeddings.shape
 # %%
-pe_df = pd.DataFrame(parliament_embeddings.numpy())
+pe_df = pd.DataFrame(p_embs.numpy())
+pe_df.columns = [str(c) for c in pe_df.columns]
 # %%
-pe_df.head()
+pe_df.shape
 # %%
 pe_df.to_csv('temp_5000_embs.csv', index=False, header=False)
 # %%
-pe_df.to_parquet('temp_5000_embs.parquet', index=False)
+pe_df.to_parquet('parliament_embs.parquet', index=False)
 
 # %%
 pe_tt = torch.tensor(pe_df.values)

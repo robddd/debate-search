@@ -7,7 +7,7 @@ from os.path import isfile, join
 
 import pandas as pd
 # %%
-fld = '../nz-debates/'
+fld = '../insights-from-unstructured-data/nz-debates/'
 # %%
 txt_fns = [f for f in listdir(fld) if isfile(join(fld, f))]
 # %%
@@ -78,5 +78,5 @@ df.shape
 # %%
 df['speaker'].value_counts()[:5]
 # %%
-df.to_csv('debates_by_message.csv', index=False)
+df.to_csv('data/debates_by_message.csv', index=False)
 # %%
